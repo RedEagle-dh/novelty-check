@@ -1,0 +1,40 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    runs-on: ubuntu-latest
+    container: python:${{ matrix.python }}-slim
+    steps:
+      - uses: actions/checkout@v7
+      - name: Unit tests (offline, recorded API answers)
+        run: python -m unittest discover -s tests -t . -v
+      - name: Wrapper runs
+        run: sh skills/novelty-check/scripts/papers --version
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The Python that ships with the Xcode Command Line Tools, as on colleagues' Macs.
+      - name: Unit tests with the system python3
+        run: /usr/bin/python3 --version && /usr/bin/python3 -m unittest discover -s tests -t . -v
+      - name: Wrapper runs
+        run: sh skills/novelty-check/scripts/papers --version
+
+  lint:
+    runs-on: ubuntu-latest
+    container: python:3.13-slim
+    steps:
+      - uses: actions/checkout@v7
+      - run: pip install --quiet ruff==0.17.3
+      - run: ruff check .
+      - run: ruff format --check .

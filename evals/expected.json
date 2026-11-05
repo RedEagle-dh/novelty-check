@@ -1,0 +1,27 @@
+{
+  "ml-preference-tuning": {
+    "expect_any": ["arxiv:2305.18290"],
+    "verdicts": ["Already done", "Largely covered"],
+    "paper": "Rafailov et al. 2023, Direct Preference Optimization (NeurIPS 2023)"
+  },
+  "systems-serving-memory": {
+    "expect_any": ["doi:10.1145/3600006.3613165", "arxiv:2309.06180"],
+    "verdicts": ["Already done", "Largely covered"],
+    "paper": "Kwon et al. 2023, PagedAttention / vLLM (SOSP 2023)"
+  },
+  "security-adversarial-suffix": {
+    "expect_any": ["arxiv:2307.15043"],
+    "verdicts": ["Already done", "Largely covered"],
+    "paper": "Zou et al. 2023, Universal and Transferable Adversarial Attacks on Aligned Language Models"
+  },
+  "hci-simulated-town": {
+    "expect_any": ["doi:10.1145/3586183.3606763", "arxiv:2304.03442"],
+    "verdicts": ["Already done", "Largely covered"],
+    "paper": "Park et al. 2023, Generative Agents (UIST 2023)"
+  },
+  "open-thermal-ci": {
+    "expect_any": [],
+    "verdicts": ["Partly covered", "No matching work found", "Largely covered"],
+    "paper": "No known single paper. Check by hand that any 'Already done' verdict is backed by a real match."
+  }
+}
