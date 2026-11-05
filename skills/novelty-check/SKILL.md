@@ -68,8 +68,8 @@ so the result is the same whether subagents run in parallel or you do every step
 Run `papers doctor`. It prints a mode:
 
 - **FULL**: go on.
-- **REDUCED** (no Semantic Scholar key, or it was rejected): Semantic Scholar keyword search is
-  off; the other sources still work. Show the user the "To fix" lines from the doctor output and
+- **REDUCED** (no Semantic Scholar key, the key was rejected, or Semantic Scholar is unreachable):
+  Semantic Scholar keyword search is unavailable; the other sources still work. Show the user the "To fix" lines from the doctor output and
   ask whether to continue in reduced mode or set the key up first.
 - **BLOCKED** (no network): stop and show the user the fix from the doctor output.
 

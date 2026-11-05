@@ -30,6 +30,15 @@ INTERVALS = {
     "doi": 0.3,
     "fulltext": 1.0,
 }
+# Retries for answers that mean "try again later" (429, 5xx): (retries, first wait, longest wait).
+# Semantic Scholar answers 429 at busy times even far below a key's 1 request/s: on 2026-11-05
+# about half of all keyed searches failed that way although they were 2 to 5 seconds apart.
+# Spacing doesn't help there, retrying does, so it gets more and shorter retries.
+RETRY_POLICY = {
+    "s2": (6, 1.5, 15.0),
+    "s2-keyless": (4, 2.0, 20.0),
+}
+DEFAULT_RETRY = (3, 2.0, 60.0)
 CACHE_TTL = 7 * 24 * 3600
 RETRY_STATUSES = (429, 500, 502, 503, 504)
 REDACT_PARAMS = ("api_key",)
@@ -135,14 +144,16 @@ def _build_url(url: str, params: dict | None) -> str:
     return url + sep + urllib.parse.urlencode(clean)
 
 
-def _retry_after(headers, attempt: int) -> float:
+def _retry_after(headers, attempt: int, source: str = "") -> float:
+    """Seconds to wait before retry number `attempt + 1`: the server's Retry-After, else backoff."""
     value = headers.get("Retry-After") if headers else None
     if value:
         try:
             return min(60.0, max(1.0, float(value)))
         except ValueError:
             pass
-    return min(60.0, 2.0 ** (attempt + 1) + random.uniform(0, 1))
+    _, first, longest = RETRY_POLICY.get(source, DEFAULT_RETRY)
+    return min(longest, first * 1.6**attempt + random.uniform(0, first / 2))
 
 
 def fetch(
@@ -153,10 +164,15 @@ def fetch(
     method: str = "GET",
     data: bytes | None = None,
     cache: bool = True,
-    retries: int = 3,
+    retries: int | None = None,
     timeout: float = 30.0,
 ) -> Response:
-    """Fetch a URL as text. Returns any HTTP status; raises SourceError only when no answer came back."""
+    """Fetch a URL as text. Returns any HTTP status; raises SourceError only when no answer came back.
+
+    `retries` defaults to the source's entry in RETRY_POLICY.
+    """
+    if retries is None:
+        retries = RETRY_POLICY.get(source, DEFAULT_RETRY)[0]
     full_url = _build_url(url, params)
     hdrs = {"User-Agent": USER_AGENT}
     hdrs.update(headers or {})
@@ -186,14 +202,14 @@ def fetch(
                 ) from None
             if e.code in RETRY_STATUSES and attempt < retries:
                 last_error = "HTTP %d" % e.code
-                time.sleep(_retry_after(e.headers, attempt))
+                time.sleep(_retry_after(e.headers, attempt, source))
                 continue
             return Response(e.code, body, headers=dict(e.headers or {}))
         except (urllib.error.URLError, socket.timeout, ConnectionError, TimeoutError) as e:
             reason = getattr(e, "reason", e)
             last_error = str(reason)
             if attempt < retries:
-                time.sleep(_retry_after(None, attempt))
+                time.sleep(_retry_after(None, attempt, source))
                 continue
             raise SourceError("%s: no answer (%s)" % (source, last_error), "network") from e
     raise SourceError("%s: gave up after %d retries (%s)" % (source, retries, last_error))
