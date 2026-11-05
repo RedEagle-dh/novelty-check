@@ -59,6 +59,52 @@ class CacheTest(IsolatedTest):
                     self.assertNotIn("SECRET", f.read())
 
 
+class RetryTest(IsolatedTest):
+    def _flaky(self, failures):
+        import io
+        import urllib.error
+
+        calls = []
+
+        class Ok:
+            status = 200
+            headers = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"{}"
+
+        def urlopen(req, timeout=None):
+            calls.append(1)
+            if len(calls) <= failures:
+                raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", {}, io.BytesIO(b"slow down"))
+            return Ok()
+
+        return calls, urlopen
+
+    def test_semantic_scholar_gets_more_retries_than_others(self):
+        calls, urlopen = self._flaky(5)
+        with mock.patch("urllib.request.urlopen", urlopen), mock.patch("time.sleep"):
+            resp = net.fetch("s2", "https://api.semanticscholar.org/x", cache=False)
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(len(calls), 6)
+
+        calls, urlopen = self._flaky(5)
+        with mock.patch("urllib.request.urlopen", urlopen), mock.patch("time.sleep"):
+            resp = net.fetch("dblp", "https://sparql.dblp.org/x", cache=False)
+        self.assertEqual(resp.status, 429)
+        self.assertEqual(len(calls), 4)
+
+    def test_backoff_stays_within_policy(self):
+        waits = [net._retry_after(None, attempt, "s2") for attempt in range(6)]
+        self.assertTrue(all(1.5 <= w <= 15.0 for w in waits), waits)
+
+
 class ThrottleTest(unittest.TestCase):
     def test_slots_are_spaced_across_processes(self):
         import tempfile

@@ -402,4 +402,10 @@ Where the build differs from or adds to the design above:
     falls back to the working directory.
   - With `sandbox_workspace_write.network_access=true`, every source works.
   - A full run in Codex and in OpenCode is still to do.
+- **Semantic Scholar rate limits (follow-up):** with a valid key, about half of all searches got
+  429, even 2 to 5 seconds apart (key limit: 1 request/s across all endpoints).
+  - Calls stay 1.05 s apart, and 429 answers are now retried up to 6 times with short backoff. 8 of
+    8 live searches then succeeded.
+  - `doctor` now retries its Semantic Scholar check. A 429 with a valid key no longer counts as
+    REDUCED, and the mode line says why a run is reduced.
 

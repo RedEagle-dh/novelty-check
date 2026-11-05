@@ -124,7 +124,10 @@ $P --help
 ```
 
 Responses are cached for 7 days in `~/.cache/novelty-check/`, and requests to each source are
-spaced out across processes, so parallel subagents stay within each API's rate limits.
+spaced out across processes, so parallel subagents stay within each API's rate limits. Semantic
+Scholar allows one request per second per key, across all its endpoints, so its calls are at
+least 1.05 s apart. At busy times it also answers "too many requests" well below that rate; the
+tool retries those up to six times, and calls that still fail are listed in the run's search log.
 
 ## Development
 

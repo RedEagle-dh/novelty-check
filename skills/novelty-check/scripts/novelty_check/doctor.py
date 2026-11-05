@@ -16,8 +16,10 @@ PROBE_DOI = "10.1145/3600006.3613165"
 
 def _probe(source: str, url: str, params=None, headers=None) -> tuple[str, str]:
     """Return (state, detail) where state is ok, limited, rejected, failed or offline."""
+    # Semantic Scholar answers 429 at busy times even to a valid key, so one 429 proves nothing.
+    retries = 3 if source.startswith("s2") else 0
     try:
-        resp = net.fetch(source, url, params=params, headers=headers, cache=False, retries=0, timeout=20)
+        resp = net.fetch(source, url, params=params, headers=headers, cache=False, retries=retries, timeout=20)
     except net.SourceError as e:
         return ("offline" if e.kind == "network" else "failed", str(e))
     if resp.status == 200:
@@ -25,7 +27,7 @@ def _probe(source: str, url: str, params=None, headers=None) -> tuple[str, str]:
     if resp.status in (401, 403):
         return ("rejected", "HTTP %d: %s" % (resp.status, util.norm_space(resp.text)[:120]))
     if resp.status == 429:
-        return ("limited", "HTTP 429 (rate limit)")
+        return ("limited", "HTTP 429 (too many requests) on every try")
     return ("failed", "HTTP %d" % resp.status)
 
 
@@ -59,15 +61,31 @@ def run() -> dict:
         "doi.org": _probe("doi", "https://doi.org/" + PROBE_DOI, None, {"Accept": "application/x-bibtex"}),
     }
     report["sources"] = {k: {"state": v[0], "detail": v[1]} for k, v in probes.items()}
-    states = [v[0] for v in probes.values()]
-    if all(s == "offline" for s in states):
-        mode = "blocked"
-    elif report["keys"]["s2"]["present"] and probes["s2"][0] == "ok":
-        mode = "full"
-    else:
-        mode = "reduced"
-    report["mode"] = mode
+    report["mode"], report["mode_reason"] = decide_mode(report)
     return report
+
+
+def decide_mode(r: dict) -> tuple[str, str]:
+    """FULL, REDUCED or BLOCKED, with a sentence saying why."""
+    sources = r["sources"]
+    if all(s["state"] == "offline" for s in sources.values()):
+        return "blocked", "No source could be reached; this agent seems to have no network access."
+    unreachable = [n for n, s in sources.items() if n != "s2" and s["state"] in ("offline", "failed")]
+    tail = " Not reachable right now: %s." % ", ".join(unreachable) if unreachable else ""
+    s2_state = sources["s2"]["state"]
+    if not r["keys"]["s2"]["present"]:
+        return "reduced", "No Semantic Scholar key, so its keyword search is off; the other sources work." + tail
+    if s2_state == "rejected":
+        return "reduced", "Semantic Scholar rejected the key, so its searches will fail; the other sources work." + tail
+    if s2_state in ("offline", "failed"):
+        return "reduced", "Semantic Scholar can't be reached right now; the other sources work." + tail
+    if s2_state == "limited":
+        return "full", (
+            "Semantic Scholar accepted the key but answered 'too many requests' to every try of this check. "
+            "It does that at busy times; searches retry automatically, and calls that still fail are listed "
+            "in the run's search log." + tail
+        )
+    return "full", ("All sources are available." if not tail else "Semantic Scholar works." + tail)
 
 
 def render(r: dict) -> str:
@@ -92,13 +110,7 @@ def render(r: dict) -> str:
     for name, s in r["sources"].items():
         line("  " + name, s["state"] + (" — " + s["detail"] if s["detail"] and s["state"] != "ok" else ""))
     out.append("")
-    mode = r["mode"]
-    if mode == "full":
-        out.append("Mode: FULL. All sources are available.")
-    elif mode == "reduced":
-        out.append("Mode: REDUCED. Semantic Scholar keyword search is off; the other sources work.")
-    else:
-        out.append("Mode: BLOCKED. No source could be reached; this agent seems to have no network access.")
+    out.append("Mode: %s. %s" % (r["mode"].upper(), r["mode_reason"]))
     hints = hints_for(r)
     if hints:
         out.append("")
